@@ -1,0 +1,5 @@
+﻿  TESTSERVICEPLEASEIGNORE.c
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(121,22): warning C4018: '<': signed/unsigned mismatch
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(316,7): warning C4013: 'mkdir' undefined; assuming extern returning int
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(301): warning C4715: 'connectserver': not all control paths return a value
+  TESTSERVICEPLEASEIGNORE.vcxproj -> C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\Debug\TESTSERVICEPLEASEIGNORE.exe
