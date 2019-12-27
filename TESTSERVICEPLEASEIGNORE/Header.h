@@ -5,6 +5,7 @@
 #include <libssh/libssh.h>
 #include <Windows.h>
 #include <Lmcons.h>
+#include <direct.h>
 
 //192.168.197.137
 

