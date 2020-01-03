@@ -1,8 +1,11 @@
 ﻿  TESTSERVICEPLEASEIGNORE.c
-C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(144,63): warning C4047: ':': 'int' differs in levels of indirection from 'char *'
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(144,42): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(192,63): warning C4047: ':': 'int' differs in levels of indirection from 'char *'
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(287,7): warning C4101: 'temp3': unreferenced local variable
   Generating code
-  2 of 20 functions (10.0%) were compiled, the rest were copied from previous compilation.
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(174): warning C4715: 'uploadFile': not all control paths return a value
+  2 of 21 functions ( 9.5%) were compiled, the rest were copied from previous compilation.
     0 functions were new in current compilation
-    1 functions had inline decision re-evaluated but remain unchanged
+    4 functions had inline decision re-evaluated but remain unchanged
   Finished generating code
   TESTSERVICEPLEASEIGNORE.vcxproj -> C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\Release\TESTSERVICEPLEASEIGNORE.exe

