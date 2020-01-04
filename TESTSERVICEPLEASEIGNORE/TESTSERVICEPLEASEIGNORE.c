@@ -59,20 +59,26 @@ int downloadFile(ssh_channel chan) {
 	contentssize = atoi(size) + 1;
 
 	contents = malloc(contentssize);
-	if (contents) {						//Almost an absurd amount of safety (it makes the Visual Studio intellisense happy)
-		catchChannelError(ssh_channel_read(chan, contents, contentssize, 0), chan, "Failed to receive contents.");
+	memset(contents, 0, contentssize);
+	if (contents != 0) {						//Almost an absurd amount of safety (it makes the Visual Studio intellisense happy)
+		int tempint = 0;
+		while (tempint < contentssize - 1) {
+			tempint += catchChannelError(ssh_channel_read(chan, contents + strlen(contents), contentssize - tempint, 0), chan, "Failed to receive contents.");
+		}
 		contents[contentssize - 1] = '\0';
 		sendOk(chan);
 	}
-	else return -1;
+	else catchChannelError(-1, chan, "contents is 0.");
+
+	fprintf(logfile, "contents: '%s'\n", contents);
 
 	filecontentsize = b64_decoded_size(contents);
 	filecontent = malloc(filecontentsize);
-	if (filecontent) {
+	if (filecontent != 0) {
+		memset(filecontent, 0, filecontentsize);
 		b64_decode(contents, filecontent, filecontentsize);
-		filecontent[filecontentsize] = '\0';
 	}
-	else return -1;
+	else catchChannelError(-1, chan, "filecontent is 0.");
 
 	filenamesize = 2 + strlen(folderpath) + strlen(firstStruct->opts);
 	filename = malloc(filenamesize);
@@ -82,24 +88,22 @@ int downloadFile(ssh_channel chan) {
 		strcat_s(filename, filenamesize, firstStruct->opts);
 		fopen_s(&file, filename, "wb");
 		free(filename);
+		if (file == NULL)
+		{
+			catchChannelError(-1, chan, "Unable to create file.");
+		}
+		else {
+			if (filecontent != 0) fwrite(filecontent, 1, filecontentsize, file);
+			else catchChannelError(-1, chan, "filecontent became 0.");
+			fclose(file);
+		}
 	}
 	else {
 		free(filename);
-		return -1;
+		catchChannelError(-1, chan, "filename is 0.");
 	}
-	if (file == NULL)
-	{
-		fprintf(logfile, "Unable to create file.\n");
-	}
-	else {
-		fwrite(filecontent, 1, filecontentsize, file);
-		fclose(file);
-	}
-
 	free(contents);
 	free(filecontent);
-	free(file);
-
 	return 0;
 }
 
@@ -141,7 +145,7 @@ int uploadFile(ssh_channel chan) {
 			fseek(toupload, 0L, SEEK_END);
 			int uploadsize = ftell(toupload);
 			int uploadsizee = b64_encoded_size(uploadsize);
-			uploadsizemem = log10(uploadsizee) + 2;			
+			uploadsizemem = log10(uploadsizee) + 5;
 			rewind(toupload);
 
 			catchChannelError(ssh_channel_write(chan, sendcommand, sendCommandSize), chan, "Failed to repeat command.");
@@ -156,10 +160,11 @@ int uploadFile(ssh_channel chan) {
 			free(uploadsizechar);
 			readOK(chan);
 			
-			filedata = malloc(uploadsize + 1);
+			filedata = 0;
+			filedata = malloc(uploadsize);
 			if (filedata != 0) {
 				fread(filedata, 1, uploadsize + 1, toupload);
-				char* encodedfiledata = b64_encode((unsigned char*)filedata, uploadsize);
+				char* encodedfiledata = b64_encode((unsigned char*)filedata, uploadsize + 1);
 				catchChannelError(ssh_channel_write(chan, encodedfiledata, uploadsizee), chan, "Failed to send file content.");
 				readOK(chan);
 			}
@@ -329,9 +334,9 @@ ssh_session connectserver(const char* host, const char* user) {
 
 int main()
 {
-	char actualusername[256] = "";
+	char actualusername[UNLEN + 1];
 	TCHAR username[UNLEN + 1];
-	DWORD size = UNLEN + 1;
+	const DWORD size = UNLEN + 1;
 	GetUserName((TCHAR*)username, &size);
 	strncpy_s(actualusername, sizeof(actualusername), &(char)(username[0]), 1);
 	for (unsigned int i = 1; i <= sizeof(username); i++) {
@@ -351,7 +356,7 @@ int main()
 
 	fprintf(logfile, "==============================\n\n");
 	
-	session = connectserver("192.168.0.81", "WINDOWS_CLIENT");	//Make this less hard-coded
+	session = connectserver("10.0.1.183", "WINDOWS_CLIENT");	//Make this less hard-coded
 
 	if (session == NULL) {
 		fprintf(logfile, "Failed to create SSH session\n\n");

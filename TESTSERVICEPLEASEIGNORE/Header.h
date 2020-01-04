@@ -6,6 +6,7 @@
 #include <Windows.h>
 #include <Lmcons.h>
 #include <direct.h>
+#include <math.h>
 
 //192.168.197.137
 

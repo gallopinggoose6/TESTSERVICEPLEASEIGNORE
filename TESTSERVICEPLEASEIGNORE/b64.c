@@ -137,6 +137,6 @@ int b64_decode(const char* in, unsigned char* out, size_t outlen)
 		if (in[i + 3] != '=')
 			out[j + 2] = v & 0xFF;
 	}
-	out[j] = '\0';
+	out[outlen - 1] = '\0';
 	return 1;
 }
