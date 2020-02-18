@@ -1,5 +1,12 @@
 #include "Header.h"
 
+/*
+	ERROR KEY:
+	-1 Catch all for seemingly everything
+	-2 Failed to receive the 'OK' signal during processing, likely a connection issue, or server logic problem
+	-3 File I/O error
+*/
+
 struct tasking_struct* firstStruct = NULL;
 struct tasking_struct* lastStruct = NULL;
 char folderpath[256] = "C:\\Users\\";
@@ -59,8 +66,8 @@ int downloadFile(ssh_channel chan) {
 	contentssize = atoi(size) + 1;
 
 	contents = malloc(contentssize);
-	memset(contents, 0, contentssize);
 	if (contents != 0) {						//Almost an absurd amount of safety (it makes the Visual Studio intellisense happy)
+		memset(contents, 0, contentssize);
 		int tempint = 0;
 		while (tempint < contentssize - 1) {
 			tempint += catchChannelError(ssh_channel_read(chan, contents + strlen(contents), contentssize - tempint, 0), chan, "Failed to receive contents.");
@@ -69,8 +76,6 @@ int downloadFile(ssh_channel chan) {
 		sendOk(chan);
 	}
 	else catchChannelError(-1, chan, "contents is 0.");
-
-	fprintf(logfile, "contents: '%s'\n", contents);
 
 	filecontentsize = b64_decoded_size(contents);
 	filecontent = malloc(filecontentsize);
@@ -111,7 +116,7 @@ int readOK(ssh_channel chan) {
 	char temp[3];
 	catchChannelError(ssh_channel_read(chan, temp, 3, 0), chan, "Failed to read OK.");
 	temp[2] = '\0';
-	if (strcmp(temp, "ok") != 0) catchChannelError(-4, chan, "Failed to receive good OK.");
+	if (strcmp(temp, "ok") != 0) catchChannelError(-2, chan, "Failed to receive good OK.");
 	return 0;
 }
 
@@ -352,7 +357,7 @@ int main()
 	strcat_s(logpath, _countof(folderpath), "\\log.txt");
 	fopen_s(&logfile, logpath, "a");
 	
-	if (logfile == 0) return -1;
+	if (logfile == 0) return -3;
 
 	fprintf(logfile, "==============================\n\n");
 	

@@ -1,8 +1,8 @@
 ﻿  TESTSERVICEPLEASEIGNORE.c
-C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(65,18): warning C4018: '<': signed/unsigned mismatch
-C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(150,42): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
-C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(200,63): warning C4047: ':': 'int' differs in levels of indirection from 'char *'
-C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(295,7): warning C4101: 'temp3': unreferenced local variable
-C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(342,37): warning C4090: 'function': different 'const' qualifiers
-C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(182): warning C4716: 'uploadFile': must return a value
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(72,18): warning C4018: '<': signed/unsigned mismatch
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(153,42): warning C4244: '=': conversion from 'double' to 'int', possible loss of data
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(203,63): warning C4047: ':': 'int' differs in levels of indirection from 'char *'
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(298,7): warning C4101: 'temp3': unreferenced local variable
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(345,37): warning C4090: 'function': different 'const' qualifiers
+C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE\TESTSERVICEPLEASEIGNORE.c(185): warning C4716: 'uploadFile': must return a value
   TESTSERVICEPLEASEIGNORE.vcxproj -> C:\Users\gallo\source\repos\TESTSERVICEPLEASEIGNORE\Debug\TESTSERVICEPLEASEIGNORE.exe
