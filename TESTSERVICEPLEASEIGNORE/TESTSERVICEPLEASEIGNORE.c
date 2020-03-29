@@ -68,7 +68,7 @@ int downloadFile(ssh_channel chan) {
 	contents = malloc(contentssize);
 	if (contents != 0) {						//Almost an absurd amount of safety (it makes the Visual Studio intellisense happy)
 		memset(contents, 0, contentssize);
-		int tempint = 0;
+		unsigned int tempint = 0;
 		while (tempint < contentssize - 1) {
 			tempint += catchChannelError(ssh_channel_read(chan, contents + strlen(contents), contentssize - tempint, 0), chan, "Failed to receive contents.");
 		}
@@ -177,6 +177,8 @@ int uploadFile(ssh_channel chan) {
 		}
 		else catchChannelError(-1, chan, "sendcommand was 0.");
 		free(sendcommand);
+		
+		return 0;
 	}
 	else catchChannelError(-1, chan, "toupload was 0.");
 
@@ -295,7 +297,6 @@ int func_loop(ssh_session session)	//probably replace
 	catchChannelError(ssh_channel_write(channel, "1", 2), channel, "Failed to send global ID.");
 
 	//write that I am an agent
-	char temp3[3];
 	readOK(channel);
 	catchChannelError(ssh_channel_write(channel, "NA\nNA\nNA\nNA\nNA", 15), channel, "Failed to send authentication information.");
 
